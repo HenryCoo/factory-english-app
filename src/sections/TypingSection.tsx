@@ -7,6 +7,7 @@ import { Progress } from '@/components/ui/progress';
 import { Input } from '@/components/ui/input';
 import { useNavigate } from 'react-router-dom';
 import { CATEGORY_MAP } from '@/types';
+import { speak } from '@/lib/tts';
 
 export function TypingSection() {
   const navigate = useNavigate();
@@ -50,15 +51,6 @@ export function TypingSection() {
       setIdx(idx + 1);
     } else {
       setIdx(0);
-    }
-  };
-
-  const speak = (text: string) => {
-    if ('speechSynthesis' in window) {
-      const utterance = new SpeechSynthesisUtterance(text);
-      utterance.lang = 'en-US';
-      utterance.rate = 0.8;
-      speechSynthesis.speak(utterance);
     }
   };
 

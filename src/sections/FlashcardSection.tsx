@@ -1,4 +1,4 @@
-import { useState, useCallback, useEffect } from 'react';
+import { useState, useCallback } from 'react';
 import { useLearning } from '@/context/LearningContext';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -6,6 +6,7 @@ import { Badge } from '@/components/ui/badge';
 import { Progress } from '@/components/ui/progress';
 import { useNavigate } from 'react-router-dom';
 import { CATEGORY_MAP } from '@/types';
+import { speak } from '@/lib/tts';
 
 export function FlashcardSection() {
   const navigate = useNavigate();
@@ -35,19 +36,6 @@ export function FlashcardSection() {
       setIdx(0);
     }
   }, [current, idx, currentList.length, dispatch]);
-
-  const speak = useCallback((text: string) => {
-    if ('speechSynthesis' in window) {
-      const utterance = new SpeechSynthesisUtterance(text);
-      utterance.lang = 'en-US';
-      utterance.rate = 0.9;
-      speechSynthesis.speak(utterance);
-    }
-  }, []);
-
-  useEffect(() => {
-    return () => { speechSynthesis.cancel(); };
-  }, []);
 
   if (!current) {
     return (

@@ -6,6 +6,7 @@ import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
 import { useNavigate } from 'react-router-dom';
 import { CATEGORY_MAP } from '@/types';
+import { speak } from '@/lib/tts';
 
 export function DialogueSection() {
   const navigate = useNavigate();
@@ -33,15 +34,6 @@ export function DialogueSection() {
     : selectedCat
     ? (grouped[selectedCat] || [])
     : allSentences.slice(0, 50);
-
-  const speak = (text: string) => {
-    if ('speechSynthesis' in window) {
-      const utterance = new SpeechSynthesisUtterance(text);
-      utterance.lang = 'en-US';
-      utterance.rate = 0.9;
-      speechSynthesis.speak(utterance);
-    }
-  };
 
   return (
     <div className="min-h-screen bg-gradient-to-b from-slate-50 to-slate-100 dark:from-slate-950 dark:to-slate-900">
