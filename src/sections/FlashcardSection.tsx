@@ -7,6 +7,7 @@ import { Progress } from '@/components/ui/progress';
 import { useNavigate } from 'react-router-dom';
 import { CATEGORY_MAP } from '@/types';
 import { speak } from '@/lib/tts';
+import { playCorrect, playWrong, playFlip } from '@/lib/sounds';
 
 export function FlashcardSection() {
   const navigate = useNavigate();
@@ -52,6 +53,7 @@ export function FlashcardSection() {
     if (current) {
       dispatch({ type: 'ANSWER', sentenceId: current.id_num, correct, mode: 'flashcard' });
     }
+    correct ? playCorrect() : playWrong();
     setFlipped(false);
     if (idx < currentList.length - 1) {
       setIdx(idx + 1);
@@ -88,7 +90,7 @@ export function FlashcardSection() {
             <Badge
               variant={shuffle ? 'default' : 'outline'}
               className="cursor-pointer"
-              onClick={() => { setShuffle(!shuffle); setIdx(0); setFlipped(false); }}
+              onClick={() => { setShuffle(!shuffle); setIdx(0); setFlipped(false); playFlip(); }}
             >
               {shuffle ? '🔀 随机中' : '📋 顺序'}
             </Badge>

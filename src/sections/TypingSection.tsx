@@ -8,6 +8,7 @@ import { Input } from '@/components/ui/input';
 import { useNavigate } from 'react-router-dom';
 import { CATEGORY_MAP } from '@/types';
 import { speak } from '@/lib/tts';
+import { playCorrect, playWrong, playFlip } from '@/lib/sounds';
 
 export function TypingSection() {
   const navigate = useNavigate();
@@ -54,7 +55,8 @@ export function TypingSection() {
 
     setResult(isCorrect ? 'correct' : 'wrong');
     setTotalCount(prev => prev + 1);
-    if (isCorrect) setCorrectCount(prev => prev + 1);
+    if (isCorrect) { setCorrectCount(prev => prev + 1); playCorrect(); }
+    else playWrong();
 
     dispatch({ type: 'ANSWER', sentenceId: current.id_num, correct: isCorrect, mode: 'typing' });
   };
@@ -100,7 +102,7 @@ export function TypingSection() {
           <Badge
             variant={shuffle ? 'default' : 'outline'}
             className="cursor-pointer"
-            onClick={() => { setShuffle(!shuffle); setIdx(0); setInput(''); setResult(null); }}
+            onClick={() => { setShuffle(!shuffle); setIdx(0); setInput(''); setResult(null); playFlip(); }}
           >
             {shuffle ? '🔀 随机' : '📋 顺序'}
           </Badge>
