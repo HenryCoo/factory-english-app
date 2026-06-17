@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
 import { useLearning } from '@/context/LearningContext';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -17,8 +17,23 @@ export function TypingSection() {
   const [result, setResult] = useState<'correct' | 'wrong' | null>(null);
   const [correctCount, setCorrectCount] = useState(0);
   const [totalCount, setTotalCount] = useState(0);
+  const [shuffle, setShuffle] = useState(false);
+  const [shuffleSeed] = useState(() => Math.floor(Math.random() * 100000));
 
-  const sentences = getFilteredSentences();
+  const baseList = getFilteredSentences();
+
+  const sentences = useMemo(() => {
+    if (!shuffle) return baseList;
+    let s = shuffleSeed;
+    const rng = () => { s = (s * 16807) % 2147483647; return (s - 1) / 2147483646; };
+    const arr = [...baseList];
+    for (let i = arr.length - 1; i > 0; i--) {
+      const j = Math.floor(rng() * (i + 1));
+      [arr[i], arr[j]] = [arr[j], arr[i]];
+    }
+    return arr;
+  }, [baseList, shuffle, shuffleSeed]);
+
   const current = sentences[idx] || sentences[0];
   const catInfo = CATEGORY_MAP[current?.category];
 
@@ -82,10 +97,16 @@ export function TypingSection() {
         {/* Header */}
         <div className="flex items-center justify-between mb-6">
           <Button variant="ghost" onClick={() => navigate('/')}>← 返回</Button>
+          <Badge
+            variant={shuffle ? 'default' : 'outline'}
+            className="cursor-pointer"
+            onClick={() => { setShuffle(!shuffle); setIdx(0); setInput(''); setResult(null); }}
+          >
+            {shuffle ? '🔀 随机' : '📋 顺序'}
+          </Badge>
           <div className="text-sm text-slate-500">
             <span className="text-green-600 font-semibold">{correctCount}</span>/{totalCount} 正确
           </div>
-          <span className="text-sm text-slate-400">{idx + 1}/{sentences.length}</span>
         </div>
 
         <div className="flex items-center gap-2 mb-4">

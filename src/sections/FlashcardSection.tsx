@@ -1,4 +1,4 @@
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useMemo } from 'react';
 import { useLearning } from '@/context/LearningContext';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -14,6 +14,9 @@ export function FlashcardSection() {
   const [flipped, setFlipped] = useState(false);
   const [idx, setIdx] = useState(0);
   const [mode, setMode] = useState<'new' | 'review'>('new');
+  const [shuffle, setShuffle] = useState(false);
+  // 固定种子让 shuffle 在一个 session 内稳定
+  const [shuffleSeed] = useState(() => Math.floor(Math.random() * 100000));
 
   const allSentences = getFilteredSentences();
   const dueReview = sentences.filter(s => {
@@ -21,7 +24,27 @@ export function FlashcardSection() {
     return rec && rec.nextReview <= Date.now() && rec.status !== 'mastered';
   }).sort((a, b) => ((state.records[a.id_num]?.nextReview || 0) - (state.records[b.id_num]?.nextReview || 0)));
 
-  const currentList = mode === 'review' && dueReview.length > 0 ? dueReview : allSentences;
+  const baseList = mode === 'review' && dueReview.length > 0 ? dueReview : allSentences;
+
+  // 稳定 shuffle（依赖 shuffle 开关和 seed）
+  const currentList = useMemo(() => {
+    if (!shuffle) return baseList;
+    // 用 seed 固定随机种子
+    const rng = (() => {
+      let s = shuffleSeed;
+      return () => {
+        s = (s * 16807) % 2147483647;
+        return (s - 1) / 2147483646;
+      };
+    })();
+    const arr = [...baseList];
+    for (let i = arr.length - 1; i > 0; i--) {
+      const j = Math.floor(rng() * (i + 1));
+      [arr[i], arr[j]] = [arr[j], arr[i]];
+    }
+    return arr;
+  }, [baseList, shuffle, shuffleSeed]);
+
   const current = currentList[idx] || allSentences[Math.min(idx, allSentences.length - 1)];
   const catInfo = CATEGORY_MAP[current?.category];
 
@@ -61,6 +84,13 @@ export function FlashcardSection() {
             </Badge>
             <Badge variant={mode === 'review' ? 'default' : 'outline'} className="cursor-pointer" onClick={() => { setMode('review'); setIdx(0); setFlipped(false); }}>
               复习 {dueReview.length > 0 && `(${dueReview.length})`}
+            </Badge>
+            <Badge
+              variant={shuffle ? 'default' : 'outline'}
+              className="cursor-pointer"
+              onClick={() => { setShuffle(!shuffle); setIdx(0); setFlipped(false); }}
+            >
+              {shuffle ? '🔀 随机中' : '📋 顺序'}
             </Badge>
           </div>
         </div>
