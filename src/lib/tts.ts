@@ -2,53 +2,13 @@
  * 跨平台 TTS 语音工具
  *
  * 策略：
- * 1. 先尝试 speechSynthesis（自带语音引擎）
- * 2. 1 秒内没发出声音则走音频流兜底（用 CF Workers 代理 Google TTS）
+ * 1. speechSynthesis — 桌面端可用，鸿蒙上 API 存在但不发音
+ * 2. 检测是否真正发出了声音，没发出来就走音频流兜底
  */
 
 import { toast } from 'sonner';
 
 let lastSpokeTime = 0;
-
-// === 方案 A：Web Speech API ===
-function trySpeechSynth(text: string, rate: number): boolean {
-  if (!('speechSynthesis' in window)) return false;
-
-  try {
-    speechSynthesis.cancel();
-
-    const utterance = new SpeechSynthesisUtterance(text);
-    utterance.lang = 'en-US';
-    utterance.rate = rate;
-    utterance.volume = 1;
-
-    // 选英文语音
-    const voices = speechSynthesis.getVoices();
-    if (voices.length > 0) {
-      const en = voices.filter(v => v.lang.startsWith('en'));
-      if (en.length > 0) {
-        utterance.voice = en.find(v => v.lang === 'en-US') || en[0];
-      }
-    }
-
-    let started = false;
-    utterance.onstart = () => { started = true; };
-
-    // 如果系统收到错误事件，说明引擎有问题
-    utterance.onerror = () => {
-      if (!started) console.warn('SpeechSynthesis errored silently');
-    };
-
-    speechSynthesis.speak(utterance);
-    return true; // 乐观返回 true，onstart 事件稍后再确认
-  } catch {
-    return false;
-  }
-}
-
-// === 方案 B：音频流兜底（通过代理访问 Google TTS） ===
-
-// 每次播放前先清理旧的 audio
 let currentAudio: HTMLAudioElement | null = null;
 
 function stopAudio() {
@@ -60,78 +20,143 @@ function stopAudio() {
   }
 }
 
-// 播放代理后的 TTS 音频
+// === 方案 B：音频流兜底（Google TTS + 多个代理源） ===
 function playAudioFallback(text: string): void {
   stopAudio();
 
-  // 长句拆分
   const chunkSize = 180;
   const chunks: string[] = [];
   for (let i = 0; i < text.length; i += chunkSize) {
     chunks.push(text.substring(i, Math.min(i + chunkSize, text.length)));
   }
 
-  // 尝试多个代理源（有些在墙内能通）
+  // 代理源列表（按优先级，有些在国内能用）
   const proxies = [
+    // 直连 Google（有梯子时可用）
     (q: string) => `https://translate.google.com/translate_tts?ie=UTF-8&tl=en&client=tw-ob&q=${encodeURIComponent(q)}`,
+    // corsproxy.io（通用代理）
+    (q: string) => `https://corsproxy.io/?${encodeURIComponent(`https://translate.google.com/translate_tts?ie=UTF-8&tl=en&client=tw-ob&q=${encodeURIComponent(q)}`)}`,
+    // allorigins
     (q: string) => `https://api.allorigins.win/raw?url=${encodeURIComponent(`https://translate.google.com/translate_tts?ie=UTF-8&tl=en&client=tw-ob&q=${encodeURIComponent(q)}`)}`,
+    // codetabs
+    (q: string) => `https://api.codetabs.com/v1/proxy?quest=${encodeURIComponent(`https://translate.google.com/translate_tts?ie=UTF-8&tl=en&client=tw-ob&q=${encodeURIComponent(q)}`)}`,
   ];
 
   let proxyIdx = 0;
   let chunkIdx = 0;
 
   const playChunk = () => {
-    if (chunkIdx >= chunks.length) return;
+    if (chunkIdx >= chunks.length) {
+      stopAudio();
+      return;
+    }
 
     const url = proxies[proxyIdx](chunks[chunkIdx]);
 
     const audio = new Audio();
     audio.volume = 1;
-    audio.preload = 'auto';
 
-    let timeout: ReturnType<typeof setTimeout>;
+    let settled = false;
+    let cleanupTimer: ReturnType<typeof setTimeout>;
 
-    audio.oncanplaythrough = () => {
-      clearTimeout(timeout);
-      audio.play().catch(() => {});
-    };
-
-    audio.onended = () => {
+    const nextChunk = () => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(cleanupTimer);
       chunkIdx++;
       playChunk();
     };
 
-    audio.onerror = () => {
-      // 当前代理失败，换下一个
+    const nextProxy = () => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(cleanupTimer);
       proxyIdx++;
       if (proxyIdx < proxies.length) {
-        playChunk(); // retry with next proxy
+        playChunk(); // 用下一个代理重试同一个 chunk
       } else {
-        // 所有代理都失败了
-        chunkIdx++;
+        // 所有代理都失败，跳过这个 chunk
         proxyIdx = 0;
+        chunkIdx++;
         playChunk();
       }
     };
 
-    // 超时也换代理
-    timeout = setTimeout(() => {
-      audio.onerror?.(new Event('timeout'));
-    }, 5000);
+    audio.oncanplaythrough = () => {
+      audio.play().catch(() => {});
+    };
+
+    audio.onended = nextChunk;
+    audio.onerror = nextProxy;
+
+    // 5 秒超时 → 换代理
+    cleanupTimer = setTimeout(nextProxy, 5000);
 
     currentAudio = audio;
     audio.src = url;
     audio.load();
   };
 
+  // 显示加载提示
+  toast.info('正在加载语音...', { duration: 2000 });
+
   playChunk();
+}
+
+// === 方案 A + 失败检测 ===
+function trySpeechWithFallback(text: string, rate: number): void {
+  if (!('speechSynthesis' in window)) {
+    playAudioFallback(text);
+    return;
+  }
+
+  try {
+    speechSynthesis.cancel();
+
+    const utterance = new SpeechSynthesisUtterance(text);
+    utterance.lang = 'en-US';
+    utterance.rate = rate;
+    utterance.volume = 1;
+
+    const voices = speechSynthesis.getVoices();
+    const enVoices = voices.filter(v => v.lang.startsWith('en'));
+    if (enVoices.length > 0) {
+      utterance.voice = enVoices.find(v => v.lang === 'en-US') || enVoices[0];
+    }
+
+    let started = false;
+
+    // 1.2 秒内 onstart 没触发 → 认为语音引擎不可用
+    const failTimer = setTimeout(() => {
+      if (!started) {
+        speechSynthesis.cancel();
+        playAudioFallback(text);
+      }
+    }, 1200);
+
+    utterance.onstart = () => {
+      started = true;
+      clearTimeout(failTimer);
+    };
+
+    utterance.onerror = () => {
+      if (!started) {
+        clearTimeout(failTimer);
+        speechSynthesis.cancel();
+        playAudioFallback(text);
+      }
+    };
+
+    speechSynthesis.speak(utterance);
+  } catch {
+    playAudioFallback(text);
+  }
 }
 
 // === 公开 API ===
 
 export function initTTS(): void {
   if (!('speechSynthesis' in window)) return;
-
   speechSynthesis.onvoiceschanged = () => {
     speechSynthesis.getVoices();
   };
@@ -140,17 +165,9 @@ export function initTTS(): void {
 export function speak(text: string, rate = 0.9): void {
   if (!text?.trim()) return;
 
-  // 防止连击
   const now = Date.now();
-  if (now - lastSpokeTime < 500) return;
+  if (now - lastSpokeTime < 400) return;
   lastSpokeTime = now;
 
-  // 先试方案 A
-  const synthWorked = trySpeechSynth(text, rate);
-
-  if (!synthWorked) {
-    // 方案 B 兜底
-    toast.info('正在加载语音...', { duration: 1000 });
-    playAudioFallback(text);
-  }
+  trySpeechWithFallback(text, rate);
 }
