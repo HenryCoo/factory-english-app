@@ -1,12 +1,10 @@
 /**
  * 跨平台 TTS 语音工具
  *
- * 策略：
- * 1. Edge TTS (speech.platform.bing.com) — 微软 TTS，国内可访问，音质最好
- * 2. speechSynthesis — 浏览器原生，桌面端兜底
+ * 策略（按优先级）：
+ * 1. 远程 TTS API（HTTP POST，兼容性好）→ 返回 MP3 blob → Audio 播放
+ * 2. speechSynthesis 兜底
  */
-
-import EdgeTTSBrowser from '@kingdanx/edge-tts-browser';
 
 let lastSpokeTime = 0;
 let currentAudio: HTMLAudioElement | null = null;
@@ -21,7 +19,6 @@ function stopAudio() {
   }
 }
 
-// 通过 Audio blob 播放
 function playBlob(blob: Blob) {
   stopAudio();
   const url = URL.createObjectURL(blob);
@@ -31,77 +28,70 @@ function playBlob(blob: Blob) {
   audio.play().catch(() => {});
 }
 
-// === 方案 A：Edge TTS（微软云端，国内可达） ===
-async function speakViaEdge(text: string, rate: number): Promise<boolean> {
-  try {
-    const tts = new EdgeTTSBrowser();
-    const ratePercent = Math.round((rate - 1) * 100);
-    const rateStr = (ratePercent >= 0 ? '+' : '') + ratePercent + '%';
+// === 方案 A：远程 Edge TTS 代理 API ===
+const TTS_ENDPOINTS = [
+  'https://tts.wangwangit.com/v1/audio/speech',
+  'https://tts-api.ssrsss.workers.dev/v1/audio/speech',
+];
 
-    tts.tts.setVoiceParams({
-      text,
-      voice: 'en-US-AriaNeural',
-      rate: rateStr,
-      volume: '+0%',
-    });
+async function speakViaAPI(text: string, rate: number): Promise<boolean> {
+  for (const endpoint of TTS_ENDPOINTS) {
+    try {
+      const resp = await fetch(endpoint, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          input: text,
+          voice: 'en-US-AriaNeural',
+          speed: rate,
+          pitch: '0',
+          style: 'general',
+        }),
+      });
 
-    const blob = await tts.ttsToFile('audio.mp3');
-    playBlob(blob as Blob);
-    return true;
-  } catch {
-    return false;
+      if (!resp.ok) continue;
+
+      const blob = await resp.blob();
+      if (blob.size < 200) continue; // 太小说明是错误响应
+      playBlob(blob);
+      return true;
+    } catch {
+      continue;
+    }
   }
+  return false;
 }
 
-// === 方案 B：Web Speech API 兜底 ===
+// === 方案 B：Web Speech API ===
 function speakViaSpeech(text: string, rate: number): boolean {
   if (!('speechSynthesis' in window)) return false;
-
   try {
     speechSynthesis.cancel();
-
-    const utterance = new SpeechSynthesisUtterance(text);
-    utterance.lang = 'en-US';
-    utterance.rate = rate;
-    utterance.volume = 1;
-
+    const u = new SpeechSynthesisUtterance(text);
+    u.lang = 'en-US';
+    u.rate = rate;
+    u.volume = 1;
     const voices = speechSynthesis.getVoices();
-    const enVoices = voices.filter(v => v.lang.startsWith('en'));
-    if (enVoices.length > 0) {
-      utterance.voice = enVoices.find(v => v.lang === 'en-US') || enVoices[0];
-    }
-
-    speechSynthesis.speak(utterance);
+    const en = voices.filter(v => v.lang.startsWith('en'));
+    if (en.length > 0) u.voice = en.find(v => v.lang === 'en-US') || en[0];
+    speechSynthesis.speak(u);
     return true;
-  } catch {
-    return false;
-  }
+  } catch { return false; }
 }
 
 // === 公开 API ===
 
 export function initTTS(): void {
-  // 预加载 Edge TTS 的语音列表（触发 DNS/连接预热）
-  EdgeTTSBrowser.getVoices().catch(() => {});
-
   if (!('speechSynthesis' in window)) return;
-  speechSynthesis.onvoiceschanged = () => {
-    speechSynthesis.getVoices();
-  };
+  speechSynthesis.onvoiceschanged = () => speechSynthesis.getVoices();
 }
 
-export function speak(text: string, rate = 0.9): void {
+export async function speak(text: string, rate = 0.9): Promise<void> {
   if (!text?.trim()) return;
-
   const now = Date.now();
   if (now - lastSpokeTime < 400) return;
   lastSpokeTime = now;
 
-  // 优先 Edge TTS（音质好，墙内可达）
-  speakViaEdge(text, rate).then(success => {
-    if (!success) {
-      // 兜底：浏览器自带语音
-      speakViaSpeech(text, rate);
-    }
-  });
+  const ok = await speakViaAPI(text, rate);
+  if (!ok) speakViaSpeech(text, rate);
 }
