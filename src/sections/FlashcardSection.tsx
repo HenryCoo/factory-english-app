@@ -23,7 +23,13 @@ export function FlashcardSection() {
   const dueReview = sentences.filter(s => {
     const rec = state.records[s.id_num];
     return rec && rec.nextReview <= Date.now() && rec.status !== 'mastered';
-  }).sort((a, b) => ((state.records[a.id_num]?.nextReview || 0) - (state.records[b.id_num]?.nextReview || 0)));
+  }).sort((a, b) => {
+    const ra = state.records[a.id_num];
+    const rb = state.records[b.id_num];
+    // 错题优先：错得越多越靠前
+    if ((rb?.wrongCount || 0) !== (ra?.wrongCount || 0)) return (rb?.wrongCount || 0) - (ra?.wrongCount || 0);
+    return (ra?.nextReview || 0) - (rb?.nextReview || 0);
+  });
 
   const baseList = mode === 'review' && dueReview.length > 0 ? dueReview : allSentences;
 
@@ -104,20 +110,19 @@ export function FlashcardSection() {
         </div>
 
         {/* Flashcard */}
-        <div className="perspective-1000 mb-6" style={{ perspective: '1000px' }}>
+        <div className="perspective-1000 mb-4" style={{ perspective: '1000px' }}>
           <div
-            className={`relative w-full min-h-[320px] cursor-pointer transition-transform duration-500 ${flipped ? 'rotate-y-180' : ''}`}
-            style={{ transformStyle: 'preserve-3d' }}
-            onClick={() => setFlipped(!flipped)}
+            className={`relative w-full cursor-pointer transition-transform duration-500 ${flipped ? 'rotate-y-180' : ''}`}
+            style={{ transformStyle: 'preserve-3d', minHeight: '340px' }}
           >
             {/* Front */}
             <Card
-              className="absolute inset-0 backface-hidden border-2 border-blue-200 dark:border-blue-800"
+              className="absolute inset-0 backface-hidden border-2 border-blue-200 dark:border-blue-800 flex flex-col"
               style={{ backfaceVisibility: 'hidden' }}
             >
-              <CardContent className="pt-8 pb-6 px-6 flex flex-col items-center justify-center min-h-[320px]">
-                <div className="text-center">
-                  <div className="text-4xl font-bold text-slate-800 dark:text-slate-100 mb-3 leading-relaxed">
+              <CardContent className="p-6 flex-1 flex flex-col">
+                <div className="flex-1 text-center overflow-y-auto max-h-72">
+                  <div className="text-3xl sm:text-4xl font-bold text-slate-800 dark:text-slate-100 mb-3 break-words">
                     {current.word}
                   </div>
                   <div className="text-sm text-slate-400 dark:text-slate-500 mb-2">
@@ -126,10 +131,10 @@ export function FlashcardSection() {
                   <div className="text-sm text-slate-500 dark:text-slate-400 mb-4">
                     {current.pos}
                   </div>
-                  <div className="text-base italic text-slate-600 dark:text-slate-300 mb-3 leading-relaxed">
+                  <div className="text-base italic text-slate-600 dark:text-slate-300 mb-3 leading-relaxed break-words">
                     "{current.sentence_en}"
                   </div>
-                  <div className="mt-4">
+                  <div>
                     <Badge variant="secondary" className="text-xs">
                       {catInfo?.name || current.category}
                     </Badge>
@@ -137,32 +142,37 @@ export function FlashcardSection() {
                       {'★'.repeat(current.difficulty)}
                     </Badge>
                   </div>
-                  <div className="mt-4 text-sm text-slate-400 dark:text-slate-500">
-                    👆 点击翻转查看中文
-                  </div>
+                </div>
+                <div className="text-center text-xs text-slate-400 dark:text-slate-500 mt-2">
+                  👆 点击翻转查看中文
                 </div>
               </CardContent>
             </Card>
 
             {/* Back */}
             <Card
-              className="absolute inset-0 backface-hidden rotate-y-180 border-2 border-emerald-200 dark:border-emerald-800"
+              className="absolute inset-0 backface-hidden rotate-y-180 border-2 border-emerald-200 dark:border-emerald-800 flex flex-col"
               style={{ backfaceVisibility: 'hidden', transform: 'rotateY(180deg)' }}
             >
-              <CardContent className="pt-10 pb-6 px-6 flex flex-col items-center justify-center min-h-[320px]">
-                <div className="text-center">
-                  <div className="text-4xl font-bold text-slate-800 dark:text-slate-100 mb-4 leading-relaxed">
+              <CardContent className="p-6 flex-1 flex flex-col">
+                <div className="flex-1 text-center overflow-y-auto max-h-64">
+                  <div className="text-3xl sm:text-4xl font-bold text-slate-800 dark:text-slate-100 mb-4 break-words">
                     {current.word}
                   </div>
                   <div className="text-2xl text-emerald-600 dark:text-emerald-400 font-semibold mb-4">
                     {current.chinese_word}
                   </div>
-                  <div className="text-base text-slate-600 dark:text-slate-300 mb-5 leading-relaxed">
+                  <div className="text-base text-slate-600 dark:text-slate-300 mb-5 leading-relaxed break-words">
                     "{current.sentence_cn}"
                   </div>
                   <div className="text-sm text-slate-400 dark:text-slate-500">
                     {current.pos} · {current.pronunciation_us}
                   </div>
+                </div>
+                <div className="text-center mt-2">
+                  <Button variant="outline" size="sm" onClick={(e) => { e.stopPropagation(); speak(current.sentence_en); }} className="inline-flex items-center gap-1">
+                    🔊 朗读句子
+                  </Button>
                 </div>
               </CardContent>
             </Card>
@@ -171,8 +181,8 @@ export function FlashcardSection() {
 
         {/* Action buttons */}
         <div className="flex items-center justify-center gap-3 mb-4">
-          <Button variant="outline" size="sm" onClick={() => speak(current.sentence_en)} className="flex items-center gap-1">
-            🔊 朗读
+          <Button variant="outline" size="sm" onClick={() => speak(current.word)} className="flex items-center gap-1">
+            🔊 读单词
           </Button>
           <Button variant="outline" size="sm" onClick={() => { setFlipped(false); if (idx < currentList.length - 1) setIdx(idx + 1); else setIdx(0); }}>
             ⏭ 跳过

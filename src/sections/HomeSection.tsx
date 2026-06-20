@@ -6,7 +6,7 @@ import { Progress } from '@/components/ui/progress';
 import { useNavigate } from 'react-router-dom';
 
 export function HomeSection() {
-  const { getStats, getDueReviewSentences, sentences } = useLearning();
+  const { getStats, getDueReviewSentences, sentences, state } = useLearning();
   const navigate = useNavigate();
   const stats = getStats();
   const dueReview = getDueReviewSentences();
@@ -78,6 +78,14 @@ export function HomeSection() {
           </Card>
         )}
 
+        {/* Daily calendar */}
+        <Card className="mb-6">
+          <CardContent className="pt-5 pb-4">
+            <h2 className="text-sm font-semibold text-slate-600 dark:text-slate-400 mb-3">📅 学习日历</h2>
+            <CalendarHeatmap dailyStats={state.dailyStats} />
+          </CardContent>
+        </Card>
+
         {/* Quick actions */}
         <div className="grid grid-cols-3 gap-3 mb-8">
           <Card className="cursor-pointer hover:shadow-md transition-shadow" onClick={() => navigate('/learn/flashcard')}>
@@ -130,6 +138,83 @@ export function HomeSection() {
             📈 查看学习统计
           </Button>
         </div>
+      </div>
+    </div>
+  );
+}
+
+// Simple calendar heatmap component
+function CalendarHeatmap({ dailyStats }: { dailyStats: Record<string, { date: string; reviewed: number }> }) {
+  // Show last 14 weeks (98 days) for a good visual
+  const weeks: string[][] = [];
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+
+  for (let w = 13; w >= 0; w--) {
+    const week: string[] = [];
+    for (let d = 6; d >= 0; d--) {
+      const date = new Date(today);
+      date.setDate(date.getDate() - (w * 7 + d));
+      const key = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
+      week.push(key);
+    }
+    weeks.push(week);
+  }
+
+  const maxCount = Math.max(1, ...Object.values(dailyStats).map(d => d.reviewed || 0));
+
+  function heatColor(dateKey: string): string {
+    const count = dailyStats[dateKey]?.reviewed || 0;
+    if (count === 0) return 'bg-slate-100 dark:bg-slate-800';
+    const intensity = count / maxCount;
+    if (intensity <= 0.25) return 'bg-emerald-200 dark:bg-emerald-900';
+    if (intensity <= 0.5) return 'bg-emerald-400 dark:bg-emerald-700';
+    if (intensity <= 0.75) return 'bg-emerald-500 dark:bg-emerald-600';
+    return 'bg-emerald-600 dark:bg-emerald-400';
+  }
+
+  const todayKey = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
+  const todayCount = dailyStats[todayKey]?.reviewed || 0;
+
+  // Day labels
+  const dayLabels = ['日', '一', '二', '三', '四', '五', '六'];
+
+  return (
+    <div className="w-full overflow-x-auto">
+      <div className="text-xs text-slate-500 mb-2 text-center">
+        今日已学 <strong className="text-emerald-600">{todayCount}</strong> 词 · 近 14 周学习记录
+      </div>
+      <div className="flex justify-center">
+        <div className="flex gap-0.5">
+            {weeks[0]?.map((_, dayIdx) => (
+              <div key={`col-${dayIdx}`} className="flex flex-col gap-0.5">
+                {weeks.map((week) => {
+                const key = week[dayIdx];
+                const isToday = key === todayKey;
+                return (
+                  <div
+                    key={key}
+                    className={`w-3 h-3 rounded-sm ${heatColor(key)} ${isToday ? 'ring-2 ring-blue-400 ring-offset-1' : ''}`}
+                    title={`${key}: ${dailyStats[key]?.reviewed || 0} 词`}
+                  />
+                );
+              })}
+            </div>
+          ))}
+        </div>
+        <div className="flex flex-col justify-between ml-2 text-[10px] text-slate-400 h-24 py-0.5">
+          {dayLabels.map((label, i) => (
+            <span key={i} className={i % 2 === 0 ? 'visible' : 'invisible'}>{label}</span>
+          ))}
+        </div>
+      </div>
+      <div className="flex items-center justify-center gap-1 mt-2 text-[10px] text-slate-400">
+        <span>少</span>
+        <div className="w-3 h-3 rounded-sm bg-slate-100 dark:bg-slate-800" />
+        <div className="w-3 h-3 rounded-sm bg-emerald-200 dark:bg-emerald-900" />
+        <div className="w-3 h-3 rounded-sm bg-emerald-400 dark:bg-emerald-700" />
+        <div className="w-3 h-3 rounded-sm bg-emerald-600 dark:bg-emerald-400" />
+        <span>多</span>
       </div>
     </div>
   );

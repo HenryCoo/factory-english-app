@@ -64,7 +64,11 @@ function reducer(state: LearningState, action: LearningAction): LearningState {
 
       const baseStreak = correct ? (newRecord.history.filter(h => h.result === 'correct').length) : 0;
       const intervalIndex = Math.min(baseStreak, SRS_INTERVALS.length - 1);
-      const days = SRS_INTERVALS[intervalIndex] || 1;
+
+      // 自适应：错误的词间隔短，正确的按 streak 递增
+      const days = correct
+        ? (SRS_INTERVALS[intervalIndex] || 1)
+        : 1; // 答错 → 明天再来
 
       newRecord.history = [...newRecord.history, { timestamp: now, result: correct ? 'correct' : 'wrong', mode }];
       newRecord.lastReview = now;

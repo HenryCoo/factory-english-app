@@ -20,6 +20,7 @@ export function TypingSection() {
   const [totalCount, setTotalCount] = useState(0);
   const [shuffle, setShuffle] = useState(false);
   const [shuffleSeed] = useState(() => Math.floor(Math.random() * 100000));
+  const [typingMode, setTypingMode] = useState<'sentence' | 'word'>('sentence');
 
   const baseList = getFilteredSentences();
 
@@ -41,17 +42,23 @@ export function TypingSection() {
   const checkAnswer = () => {
     if (!current || result) return;
 
-    // Normalize for comparison
-    const userAnswer = input.trim().toLowerCase().replace(/\s+/g, ' ').replace(/[.,!?;:'"]/g, '');
-    const correctAnswer = current.sentence_en.toLowerCase().replace(/\s+/g, ' ').replace(/[.,!?;:'"]/g, '');
+    const userAnswer = input.trim().toLowerCase().replace(/[.,!?;:'"]/g, '');
 
-    // Calculate accuracy (allow some leniency - 80% match)
-    const userWords = userAnswer.split(' ');
-    const correctWords = correctAnswer.split(' ');
-    const matches = userWords.filter((w, i) => w === correctWords[i]).length;
-    const accuracy = correctWords.length > 0 ? matches / correctWords.length : 0;
+    let isCorrect = false;
 
-    const isCorrect = accuracy >= 0.8;
+    if (typingMode === 'word') {
+      // 单词模式：严格匹配（宽松：忽略大小写和标点）
+      const correctWord = current.word.toLowerCase().replace(/[.,!?;:'"]/g, '').trim();
+      isCorrect = userAnswer === correctWord;
+    } else {
+      // 句子模式：80% 词级匹配
+      const ua = userAnswer.replace(/\s+/g, ' ');
+      const correctSentence = current.sentence_en.toLowerCase().replace(/\s+/g, ' ').replace(/[.,!?;:'"]/g, '');
+      const userWords = ua.split(' ');
+      const correctWords = correctSentence.split(' ');
+      const matches = userWords.filter((w, i) => w === correctWords[i]).length;
+      isCorrect = correctWords.length > 0 && matches / correctWords.length >= 0.8;
+    }
 
     setResult(isCorrect ? 'correct' : 'wrong');
     setTotalCount(prev => prev + 1);
@@ -99,13 +106,25 @@ export function TypingSection() {
         {/* Header */}
         <div className="flex items-center justify-between mb-6">
           <Button variant="ghost" onClick={() => navigate('/')}>← 返回</Button>
-          <Badge
-            variant={shuffle ? 'default' : 'outline'}
-            className="cursor-pointer"
-            onClick={() => { setShuffle(!shuffle); setIdx(0); setInput(''); setResult(null); playFlip(); }}
-          >
-            {shuffle ? '🔀 随机' : '📋 顺序'}
-          </Badge>
+          <div className="flex gap-2">
+            <Badge
+              variant={typingMode === 'sentence' ? 'default' : 'outline'}
+              className="cursor-pointer"
+              onClick={() => { setTypingMode('sentence'); setIdx(0); setInput(''); setResult(null); }}
+            >📝 句子</Badge>
+            <Badge
+              variant={typingMode === 'word' ? 'default' : 'outline'}
+              className="cursor-pointer"
+              onClick={() => { setTypingMode('word'); setIdx(0); setInput(''); setResult(null); }}
+            >🔤 单词</Badge>
+            <Badge
+              variant={shuffle ? 'default' : 'outline'}
+              className="cursor-pointer"
+              onClick={() => { setShuffle(!shuffle); setIdx(0); setInput(''); setResult(null); playFlip(); }}
+            >
+              {shuffle ? '🔀 随机' : '📋 顺序'}
+            </Badge>
+          </div>
           <div className="text-sm text-slate-500">
             <span className="text-green-600 font-semibold">{correctCount}</span>/{totalCount} 正确
           </div>
@@ -116,12 +135,14 @@ export function TypingSection() {
           <Badge variant="outline">{'★'.repeat(current.difficulty)}</Badge>
         </div>
 
-        {/* Chinese prompt */}
+        {/* Prompt */}
         <Card className="mb-4">
           <CardContent className="pt-6 pb-4 text-center">
-            <div className="text-lg text-slate-500 dark:text-slate-400 mb-2">请翻译以下中文句子：</div>
+            <div className="text-lg text-slate-500 dark:text-slate-400 mb-2">
+              {typingMode === 'word' ? '请拼写以下单词：' : '请翻译以下中文句子：'}
+            </div>
             <div className="text-2xl font-semibold text-slate-800 dark:text-slate-100 leading-relaxed">
-              "{current.sentence_cn}"
+              {typingMode === 'word' ? current.chinese_word : `"${current.sentence_cn}"`}
             </div>
           </CardContent>
         </Card>
@@ -132,7 +153,7 @@ export function TypingSection() {
             value={input}
             onChange={e => setInput(e.target.value)}
             onKeyDown={handleKeyDown}
-            placeholder="输入对应的英文句子..."
+            placeholder={typingMode === 'word' ? '输入对应的英文单词...' : '输入对应的英文句子...'}
             className={`text-lg p-4 ${result === 'correct' ? 'border-green-500 bg-green-50 dark:bg-green-950/20' : ''} ${result === 'wrong' ? 'border-red-500 bg-red-50 dark:bg-red-950/20' : ''}`}
             disabled={!!result}
             autoFocus
@@ -141,7 +162,7 @@ export function TypingSection() {
 
         {/* Action buttons */}
         <div className="flex gap-3 mb-4">
-          <Button variant="outline" size="sm" onClick={() => speak(current.sentence_en)}>
+          <Button variant="outline" size="sm" onClick={() => speak(typingMode === 'word' ? current.word : current.sentence_en)}>
             🔊 提示发音
           </Button>
           {result ? (
@@ -163,8 +184,8 @@ export function TypingSection() {
                 {result === 'correct' ? '✅ 回答正确！' : '❌ 回答有误'}
               </div>
               <div className="text-sm text-slate-600 dark:text-slate-300">
-                <span className="font-medium text-slate-500">参考译文：</span>
-                <span className="text-green-700 dark:text-green-400">{current.sentence_en}</span>
+                <span className="font-medium text-slate-500">正确{typingMode === 'word' ? '单词' : '译文'}：</span>
+                <span className="text-green-700 dark:text-green-400">{typingMode === 'word' ? current.word : current.sentence_en}</span>
               </div>
             </CardContent>
           </Card>
