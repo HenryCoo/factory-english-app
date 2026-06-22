@@ -33,6 +33,19 @@ export interface DailyStats {
   correctRate: number;
 }
 
+export interface SentenceOverride {
+  id_num: number;
+  word: string;
+  pos: string;
+  chinese_word: string;
+  pronunciation_en: string;
+  pronunciation_us: string;
+  sentence_en: string;
+  sentence_cn: string;
+  category: string;
+  difficulty: 1 | 2 | 3;
+}
+
 export interface CategoryInfo {
   key: string;
   name: string;

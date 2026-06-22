@@ -109,6 +109,13 @@ export function HomeSection() {
               <div className="text-xs text-slate-400 mt-1">按主题</div>
             </CardContent>
           </Card>
+          <Card className="cursor-pointer hover:shadow-md transition-shadow" onClick={() => navigate('/library')}>
+            <CardContent className="pt-6 pb-4 text-center">
+              <div className="text-3xl mb-2">📚</div>
+              <div className="font-semibold text-sm">管理学习库</div>
+              <div className="text-xs text-slate-400 mt-1">增删改词条</div>
+            </CardContent>
+          </Card>
         </div>
 
         {/* Category breakdown */}

@@ -6,6 +6,7 @@ import { TypingSection } from '@/sections/TypingSection';
 import { DialogueSection } from '@/sections/DialogueSection';
 import { ProgressSection } from '@/sections/ProgressSection';
 import { CategoriesSection } from '@/sections/CategoriesSection';
+import { LibrarySection } from '@/sections/LibrarySection';
 
 function App() {
   return (
@@ -18,6 +19,7 @@ function App() {
           <Route path="/learn/dialogue" element={<DialogueSection />} />
           <Route path="/progress" element={<ProgressSection />} />
           <Route path="/categories" element={<CategoriesSection />} />
+          <Route path="/library" element={<LibrarySection />} />
         </Routes>
       </LearningProvider>
     </HashRouter>
