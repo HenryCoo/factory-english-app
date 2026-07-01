@@ -114,6 +114,7 @@ export function FlashcardSection() {
           <div
             className={`relative w-full cursor-pointer transition-transform duration-500 ${flipped ? 'rotate-y-180' : ''}`}
             style={{ transformStyle: 'preserve-3d', minHeight: '340px' }}
+            onClick={() => setFlipped(!flipped)}
           >
             {/* Front */}
             <Card
